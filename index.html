@@ -3,45 +3,48 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Prueba Puente AndroidIDE</title>
+  <title>Test Chat OneSignal</title>
   <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      padding: 50px 20px;
-      background-color: #f4f4f9;
-    }
-    button {
-      background-color: #007bff;
-      color: white;
-      border: none;
-      padding: 15px 25px;
-      font-size: 18px;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-    button:active {
-      background-color: #0056b3;
-    }
+    body { font-family: sans-serif; padding: 20px; background: #f0f2f5; text-align: center; }
+    .chat-box { max-width: 400px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    input, textarea { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+    button { width: 100%; background: #0084ff; color: white; border: none; padding: 12px; font-size: 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    button:active { background: #006bce; }
   </style>
 </head>
 <body>
 
-  <h1>App de Prueba</h1>
-  <p>Toca el botón para probar la comunicación entre el HTML y AndroidIDE:</p>
+<div class="chat-box">
+  <h2>Prueba de Chat Push</h2>
+  
+  <label for="targetUser">ID del Destinatario (External ID o Subscription ID):</label>
+  <input type="text" id="targetUser" placeholder="Ej: usuario_2">
 
-  <button onclick="probarPuente()">Enviar mensaje a Android</button>
+  <label for="messageText">Mensaje:</label>
+  <textarea id="messageText" rows="3" placeholder="Escribe un mensaje..."></textarea>
 
-  <script>
-    function probarPuente() {
-      if (window.AndroidBridge) {
-        // Llama al método de Java que configuramos en AndroidIDE
-        window.AndroidBridge.mostrarMensaje("¡Conexión exitosa entre HTML y Java!");
-      } else {
-        alert("Atención: No se detectó la app nativa (estás en un navegador normal).");
-      }
+  <button onclick="enviarMensaje()">Enviar Notificación Push</button>
+</div>
+
+<script>
+  function enviarMensaje() {
+    const destino = document.getElementById('targetUser').value.trim();
+    const texto = document.getElementById('messageText').value.trim();
+
+    if (!texto) {
+      alert("Escribe un mensaje primero.");
+      return;
     }
-  </script>
+
+    if (window.AndroidBridge) {
+      // Envía el destinatario y el mensaje a la capa nativa Java en AndroidIDE
+      window.AndroidBridge.enviarNotificacionPush(destino, texto);
+      alert("Enviando petición a la app nativa...");
+    } else {
+      alert("Aviso: Debes abrir esta página dentro de la app en AndroidIDE.");
+    }
+  }
+</script>
+
 </body>
 </html>
-
