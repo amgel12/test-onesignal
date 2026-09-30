@@ -1,1 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prueba Puente AndroidIDE</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 50px 20px;
+      background-color: #f4f4f9;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 15px 25px;
+      font-size: 18px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:active {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>App de Prueba</h1>
+  <p>Toca el botón para probar la comunicación entre el HTML y AndroidIDE:</p>
+
+  <button onclick="probarPuente()">Enviar mensaje a Android</button>
+
+  <script>
+    function probarPuente() {
+      if (window.AndroidBridge) {
+        // Llama al método de Java que configuramos en AndroidIDE
+        window.AndroidBridge.mostrarMensaje("¡Conexión exitosa entre HTML y Java!");
+      } else {
+        alert("Atención: No se detectó la app nativa (estás en un navegador normal).");
+      }
+    }
+  </script>
+
+</body>
+</html>
 
