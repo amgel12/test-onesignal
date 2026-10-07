@@ -6,44 +6,120 @@
   <title>Test Chat OneSignal</title>
   <style>
     body { font-family: sans-serif; padding: 20px; background: #f0f2f5; text-align: center; }
-    .chat-box { max-width: 400px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    input, textarea { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
-    button { width: 100%; background: #0084ff; color: white; border: none; padding: 12px; font-size: 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    .chat-box { max-width: 400px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: left; }
+    h2 { text-align: center; }
+    label { font-size: 13px; font-weight: bold; }
+    input, textarea { width: 100%; padding: 10px; margin: 6px 0 14px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 15px; }
+    button { width: 100%; background: #0084ff; color: white; border: none; padding: 12px; font-size: 16px; border-radius: 6px; cursor: pointer; font-weight: bold; margin-bottom: 8px; }
     button:active { background: #006bce; }
+    .estado { padding: 10px; border-radius: 6px; margin-bottom: 16px; font-size: 14px; text-align: center; font-weight: bold; }
+    .ok { background: #d4edda; color: #155724; }
+    .mal { background: #f8d7da; color: #721c24; }
+    .bloque { background: #f7f9fc; border: 1px solid #e1e6ee; border-radius: 6px; padding: 10px; margin-bottom: 14px; }
+    .mi-id { font-family: monospace; font-size: 15px; font-weight: bold; word-break: break-all; color: #0084ff; }
+    .mini { font-size: 11px; color: #666; margin-top: 4px; }
+    #log { font-size: 12px; color: #444; background: #f4f4f4; border-radius: 6px; padding: 8px; min-height: 20px; word-break: break-all; }
+    .inactiva { opacity: .45; pointer-events: none; }
   </style>
 </head>
 <body>
 
 <div class="chat-box">
   <h2>Prueba de Chat Push</h2>
-  
-  <label for="targetUser">ID del Destinatario (External ID o Subscription ID):</label>
-  <input type="text" id="targetUser" placeholder="Ej: usuario_2">
 
-  <label for="messageText">Mensaje:</label>
-  <textarea id="messageText" rows="3" placeholder="Escribe un mensaje..."></textarea>
+  <div id="estadoBox" class="estado mal">Conectando...</div>
 
-  <button onclick="enviarMensaje()">Enviar Notificación Push</button>
+  <div class="bloque">
+    <label>Tu ID (compartelo con el otro usuario)</label>
+    <div class="mi-id" id="miId">...</div>
+    <div class="mini">Este ID lo usa el otro usuario como destinatario.</div>
+  </div>
+
+  <div class="envio" id="zonaEnvio">
+    <label for="targetUser">ID del Destinatario</label>
+    <input type="text" id="targetUser" placeholder="Ej: usuario_2f3a9b1c">
+    <div class="mini">Dejalo vacio para enviar a todos los suscriptores.</div>
+
+    <label for="messageText">Mensaje</label>
+    <textarea id="messageText" rows="3" placeholder="Escribe un mensaje..."></textarea>
+
+    <button onclick="enviarMensaje()">Enviar Notificacion Push</button>
+  </div>
+
+  <div id="log"></div>
 </div>
 
 <script>
-  function enviarMensaje() {
-    const destino = document.getElementById('targetUser').value.trim();
-    const texto = document.getElementById('messageText').value.trim();
+  var AndroidBridge = window.AndroidBridge;
 
-    if (!texto) {
-      alert("Escribe un mensaje primero.");
+  function texto(id, v) { document.getElementById(id).textContent = v; }
+
+  function pintarEstado(e) {
+    var box = document.getElementById('estadoBox');
+    var envio = document.getElementById('zonaEnvio');
+
+    texto('miId', e.external_id || 'sin-id');
+
+    if (e.error) {
+      box.className = 'estado mal';
+      box.textContent = 'Error: ' + e.error;
+      envio.className = 'envio inactiva';
       return;
     }
 
-    if (window.AndroidBridge) {
-      // Envía el destinatario y el mensaje a la capa nativa Java en AndroidIDE
-      window.AndroidBridge.enviarNotificacionPush(destino, texto);
-      alert("Enviando petición a la app nativa...");
+    if (e.inicializado && e.conectado) {
+      box.className = 'estado ok';
+      box.textContent = 'Conectado - recibiras notificaciones';
+      envio.className = 'envio';
+    } else if (e.inicializado && !e.permiso) {
+      box.className = 'estado mal';
+      box.textContent = 'Sin permiso de notificaciones';
+      envio.className = 'envio inactiva';
+    } else if (e.inicializado) {
+      box.className = 'estado mal';
+      box.textContent = 'Sin suscripcion FCM - revisa credenciales en OneSignal';
+      envio.className = 'envio inactiva';
     } else {
-      alert("Aviso: Debes abrir esta página dentro de la app en AndroidIDE.");
+      box.className = 'estado mal';
+      box.textContent = 'OneSignal no inicializado';
+      envio.className = 'envio inactiva';
+    }
+
+    window.__estado = e;
+  }
+
+  function refrescar() {
+    if (!AndroidBridge) {
+      document.getElementById('estadoBox').textContent = 'Abre esta pagina dentro de la app';
+      return;
+    }
+    try {
+      pintarEstado(JSON.parse(AndroidBridge.obtenerEstado()));
+    } catch (err) {
+      document.getElementById('estadoBox').textContent = 'Error: ' + err;
     }
   }
+
+  function log(msg) {
+    document.getElementById('log').textContent = msg;
+  }
+
+  function enviarMensaje() {
+    if (!AndroidBridge) { alert('Abre esta pagina dentro de la app.'); return; }
+
+    var destino = document.getElementById('targetUser').value.trim();
+    var texto2 = document.getElementById('messageText').value.trim();
+
+    if (!texto2) { alert('Escribe un mensaje primero.'); return; }
+
+    AndroidBridge.enviarNotificacionPush(destino, texto2);
+    log('Enviando...' + (destino ? ' a ' + destino : ' a todos'));
+  }
+
+  window.addEventListener('load', function () {
+    refrescar();
+    setInterval(refrescar, 4000);
+  });
 </script>
 
 </body>
