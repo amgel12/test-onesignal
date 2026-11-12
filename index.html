@@ -1334,12 +1334,9 @@
   .profile-avatar-large {
       width: 90px; height: 90px; border-radius: 50%;
       border: 4px solid white;
-      background-size: cover; background-repeat: no-repeat; background-color: #e2e8f0; background-position: center;
+      background-size: cover; background-color: #e2e8f0; background-position: center;
       box-shadow: 0 6px 20px rgba(0,0,0,0.2);
-      position: relative; overflow: hidden; isolation: isolate;
   }
-  /* El avatar del perfil se pinta como fondo: evita una segunda foto superpuesta. */
-  .profile-avatar-large > img { display: none !important; }
 
   .profile-stats-row {
       display: flex; margin: 0 16px 16px; background: white;
@@ -5656,10 +5653,7 @@ style="display:none;">
             <div class="banner-bg-clip"></div>
             <div class="profile-avatar-wrap">
                 <div class="profile-avatar-large" id="avatarPerfilGrande"></div>
-                <label style="position:absolute; bottom:2px; right:2px; background:#6366f1; color:white; width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.3); margin:0; z-index:10;">
-                    <i class="fas fa-camera" style="font-size:0.7rem; pointer-events:none;"></i>
-                    <input type="file" id="inputAvatarPerfil" accept="image/*" style="position:absolute;width:100%;height:100%;opacity:0;cursor:pointer;top:0;left:0;" onchange="subirMiFotoPerfil(this)">
-                </label>
+
             </div>
         </div>
         <div id="myKeyDisplay" style="display:none;">---</div>
@@ -8662,9 +8656,8 @@ if (typeof actualizarBioResumen === 'function') actualizarBioResumen(d.bio);
                 });
             }
 
-            // Avatar: mantener una sola instancia visible en el perfil propio.
-            const imagenMostrar = d.fotoPerfil || getAvatarUrl(idAuditor);
-            window.actualizarAvatarPropio(imagenMostrar);
+            // La foto del perfil propio se administra desde Android/Kotlin.
+            // Esta página no carga ni dibuja el avatar del usuario autenticado.
 
             // Alerta Foto
             const alertFoto = document.getElementById('alertFoto');
@@ -14911,97 +14904,8 @@ window.abrirModalInvitar = () => {
     try { window.playSound('click'); } catch(e){}
 };
 
-// Renderiza la foto del usuario en un único elemento y elimina posibles duplicados
-// del mismo ID que pudieran quedar tras reconstrucciones de la pantalla.
-window.actualizarAvatarPropio = (url) => {
-    const avatares = document.querySelectorAll('#avatarPerfilGrande');
-    const perfilGrande = avatares[0] || null;
-    avatares.forEach((avatar, index) => {
-        if (index > 0) avatar.remove();
-    });
-    if (perfilGrande) {
-        perfilGrande.querySelectorAll('img').forEach(img => img.remove());
-        perfilGrande.style.backgroundImage = url ? `url("${String(url).replace(/"/g, '%22')}")` : 'none';
-        perfilGrande.style.backgroundRepeat = 'no-repeat';
-        perfilGrande.style.backgroundPosition = 'center';
-        perfilGrande.style.backgroundSize = 'cover';
-    }
-    const barraAvatar = document.getElementById('barraMiAvatar');
-    if (barraAvatar) barraAvatar.style.backgroundImage = url ? `url("${String(url).replace(/"/g, '%22')}")` : 'none';
-};
-
-window.subirMiFotoPerfil = (input) => {
-    if (input.files && input.files[0]) {
-        const file = input.files[0];
-        const avatarDiv = document.getElementById('avatarPerfilGrande');
-        avatarDiv.style.opacity = "0.5";
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const img = new Image();
-            img.src = e.target.result;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX_SIZE = 250;
-                let w = img.width;
-                let h = img.height;
-                if (w > h) { if (w > MAX_SIZE) { h *= MAX_SIZE / w; w = MAX_SIZE; } }
-                else { if (h > MAX_SIZE) { w *= MAX_SIZE / h; h = MAX_SIZE; } }
-                canvas.width = w; canvas.height = h;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, w, h);
-                const fotoBase64 = canvas.toDataURL('image/jpeg', 0.8);
-                db.ref(`users/${idAuditor}`).update({ fotoPerfil: fotoBase64 }).then(() => {
-                    notify("✅ Foto de perfil actualizada");
-                    window.actualizarAvatarPropio(fotoBase64);
-                    avatarDiv.style.opacity = "1";
-                    cacheFotosPerfil[idAuditor] = fotoBase64;
-                    document.querySelectorAll('.chat-avatar-img[data-uid="' + idAuditor + '"]').forEach(img => img.src = fotoBase64);
-                    try { window.playSound('coin'); } catch(e){}
-                });
-            };
-        };
-        reader.readAsDataURL(file);
-    }
-};
-
-window.procesarAvatarPersonal = (input) => {
-    if (input.files && input.files[0]) {
-        const file = input.files[0];
-        if(file.size > 5 * 1024 * 1024) return notify("⚠️ La imagen es muy pesada (Máx 5MB)");
-        notify("🔄 Procesando foto...");
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const img = new Image();
-            img.src = e.target.result;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX_SIZE = 300; 
-                let width = img.width;
-                let height = img.height;
-                if (width > height) {
-                    if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
-                } else {
-                    if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
-                }
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-                const base64 = canvas.toDataURL('image/jpeg', 0.7);
-                db.ref(`users/${idAuditor}`).update({ fotoPerfil: base64 })
-                    .then(() => {
-                        notify("✅ Foto guardada permanentemente");
-                        try{ window.playSound('coin'); }catch(e){}
-                        window.actualizarAvatarPropio(base64);
-                        cacheFotosPerfil[idAuditor] = base64;
-                        document.querySelectorAll('.chat-avatar-img[data-uid="' + idAuditor + '"]').forEach(img => img.src = base64);
-                    })
-                    .catch(e => notify("Error al guardar: " + e.message));
-            };
-        };
-        reader.readAsDataURL(file);
-    }
-};
+// La selección, almacenamiento y presentación de la foto del usuario propio
+// corresponde a la capa nativa Android/Kotlin, no a este documento.
 
 window.validarCodigoAmigo = () => {
     const input = document.getElementById('inputFolio');
