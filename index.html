@@ -3516,6 +3516,38 @@ window.probarPuenteKotlin = function() {
     }
 };
 
+// 🔥 PRUEBA 2: Forzar guardado de token (si ya tienes el token en JS)
+window.forzarGuardarToken = function() {
+    const log = document.getElementById('fcmDebugLog');
+    const user = firebase.auth().currentUser;
+
+    if (!user) {
+        log.textContent = "❌ Sin usuario";
+        return;
+    }
+
+    if (typeof AndroidNative !== 'undefined') {
+        log.textContent = "🔄 Solicitando token...";
+        AndroidNative.onLoginSuccess(user.uid, null, null);
+
+        // Esperar 3 segundos y verificar en DB
+        setTimeout(() => {
+            firebase.database().ref(`users/${user.uid}/fcmToken`).once('value')
+                .then(snapshot => {
+                    if (snapshot.exists()) {
+                        log.textContent = "✅ Token guardado en DB";
+                        console.log("✅ fcmToken encontrado en Firebase");
+                    } else {
+                        log.textContent = "❌ Token NO está en DB";
+                        console.error("❌ fcmToken no se guardó");
+                    }
+                });
+        }, 3000);
+    } else {
+        log.textContent = "❌ Sin puente Kotlin";
+    }
+};
+
 // 🔥 AUTO-EJECUTAR al cargar si hay usuario
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
@@ -3523,6 +3555,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (user && typeof AndroidNative !== 'undefined') {
             console.log("🔄 Auto-enviando UID a Kotlin:", user.uid);
             AndroidNative.onLoginSuccess(user.uid, null, null);
+            document.getElementById('fcmDebugLog').textContent = "✅ Auto-enviado";
         }
     }, 2000);
 });
@@ -5653,7 +5686,10 @@ style="display:none;">
             <div class="banner-bg-clip"></div>
             <div class="profile-avatar-wrap">
                 <div class="profile-avatar-large" id="avatarPerfilGrande"></div>
-
+                <label style="position:absolute; bottom:2px; right:2px; background:#6366f1; color:white; width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.3); margin:0; z-index:10;">
+                    <i class="fas fa-camera" style="font-size:0.7rem; pointer-events:none;"></i>
+                    <input type="file" id="inputAvatarPerfil" accept="image/*" style="position:absolute;width:100%;height:100%;opacity:0;cursor:pointer;top:0;left:0;" onchange="subirMiFotoPerfil(this)">
+                </label>
             </div>
         </div>
         <div id="myKeyDisplay" style="display:none;">---</div>
@@ -5796,6 +5832,10 @@ style="display:none;">
     <div id="btnAdminBots" class="menu-card-btn" onclick="toggleModoBots()" style="display:none; margin:0 16px 8px; border-radius:14px; border:2px dashed #ef4444; background:#fef2f2;">
         <i class="fas fa-robot menu-icon" style="color:#ef4444;"></i>
         <span style="font-weight:800; color:#ef4444; font-size:0.9rem;">Admin: Activar Bots</span>
+    </div>
+    <div id="btnAdminBorrarChats" class="menu-card-btn" onclick="confirmarBorradoChatsPrivados()" style="display:none; margin:0 16px 8px; border-radius:14px; border:2px solid #b91c1c; background:#fff1f2;">
+        <i class="fas fa-trash-alt menu-icon" style="color:#b91c1c;"></i>
+        <span style="font-weight:800; color:#b91c1c; font-size:0.9rem;">Admin: Borrar todos los chats privados</span>
     </div>
 
     <div style="height: 40px;"></div>
@@ -8387,7 +8427,13 @@ window.manejarAuth = async () => {
             // este usuario para que las reglas permitan ESCRIBIR (mensajes,
             // solicitudes, notificaciones). La sesión anónima solo podía leer.
             AndroidNative.onLoginSuccess(user.uid, email, pass);
-            notify("Sesión iniciada.");
+            notify("Sesión iniciada. Generando token...");
+
+            setTimeout(() => {
+                if (window.generarTokenFCMDirecto) {
+                    window.generarTokenFCMDirecto(user.uid);
+                }
+            }, 1500);
         } else {
             const u = await firebase.auth().createUserWithEmailAndPassword(email, pass);
             const nuevoCodigo = "INV-" + u.user.uid.substring(0, 5).toUpperCase();
@@ -8656,8 +8702,13 @@ if (typeof actualizarBioResumen === 'function') actualizarBioResumen(d.bio);
                 });
             }
 
-            // La foto del perfil propio se administra desde Android/Kotlin.
-            // Esta página no carga ni dibuja el avatar del usuario autenticado.
+            // Avatar
+            const imagenMostrar = d.fotoPerfil || getAvatarUrl(idAuditor);
+            const perfilGrande = document.getElementById('avatarPerfilGrande');
+            if (perfilGrande) perfilGrande.style.backgroundImage = "url('" + imagenMostrar + "')";
+
+            const barraAvatar = document.getElementById('barraMiAvatar');
+            if (barraAvatar) barraAvatar.style.backgroundImage = "url('" + imagenMostrar + "')";
 
             // Alerta Foto
             const alertFoto = document.getElementById('alertFoto');
@@ -13227,27 +13278,18 @@ function enviarPushOneSignal(destinoUid, tipo, titulo, cuerpo, opciones) {
         target_channel: "push",
         headings: { "en": titulo, "es": titulo },
         contents: { "en": cuerpo, "es": cuerpo },
-        data: Object.assign({ type: tipo }, opts.additional_data || {}),
-        // 🔥 Entrega en segundo plano: sin prioridad alta Android/Doze
-        // retrasa o descarta el push cuando la app no está abierta.
-        priority: 10,
-        android_priority: "high",
-        // 1 hora de vigencia para entregar al reconectar.
-        ttl: 3600,
-        // Canal de importancia alta creado en AppApplication.kt.
-        android_channel_id: "pagocode_channel",
-        android_visibility: 1
+        data: Object.assign({ type: tipo }, opts.additional_data || {})
     };
     if (opts.url) payload.url = opts.url;
 
     // Dentro de la app: Kotlin agrega la clave (guardada en local.properties).
     if (typeof AndroidNative !== "undefined" && AndroidNative.enviarPush) {
         try {
-            const enviado = AndroidNative.enviarPush(JSON.stringify(payload));
-            if (enviado !== false) return Promise.resolve(true);
-            console.warn("⚠️ enviarPush nativo rechazó el envío (sin ONESIGNAL_REST_API_KEY); probando Worker...");
+            AndroidNative.enviarPush(JSON.stringify(payload));
+            return Promise.resolve(true);
         } catch (e) {
             console.error("❌ Puente enviarPush falló (" + tipo + "):", e);
+            return Promise.resolve(false);
         }
     }
 
@@ -14904,8 +14946,81 @@ window.abrirModalInvitar = () => {
     try { window.playSound('click'); } catch(e){}
 };
 
-// La selección, almacenamiento y presentación de la foto del usuario propio
-// corresponde a la capa nativa Android/Kotlin, no a este documento.
+window.subirMiFotoPerfil = (input) => {
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        const avatarDiv = document.getElementById('avatarPerfilGrande');
+        avatarDiv.style.opacity = "0.5";
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.src = e.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_SIZE = 250;
+                let w = img.width;
+                let h = img.height;
+                if (w > h) { if (w > MAX_SIZE) { h *= MAX_SIZE / w; w = MAX_SIZE; } }
+                else { if (h > MAX_SIZE) { w *= MAX_SIZE / h; h = MAX_SIZE; } }
+                canvas.width = w; canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+                const fotoBase64 = canvas.toDataURL('image/jpeg', 0.8);
+                db.ref(`users/${idAuditor}`).update({ fotoPerfil: fotoBase64 }).then(() => {
+                    notify("✅ Foto de perfil actualizada");
+                    avatarDiv.style.backgroundImage = "url('" + fotoBase64 + "')";
+                    avatarDiv.style.opacity = "1";
+                    cacheFotosPerfil[idAuditor] = fotoBase64;
+                    document.querySelectorAll('.chat-avatar-img[data-uid="' + idAuditor + '"]').forEach(img => img.src = fotoBase64);
+                    try { window.playSound('coin'); } catch(e){}
+                });
+            };
+        };
+        reader.readAsDataURL(file);
+    }
+};
+
+window.procesarAvatarPersonal = (input) => {
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        if(file.size > 5 * 1024 * 1024) return notify("⚠️ La imagen es muy pesada (Máx 5MB)");
+        notify("🔄 Procesando foto...");
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.src = e.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_SIZE = 300; 
+                let width = img.width;
+                let height = img.height;
+                if (width > height) {
+                    if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
+                } else {
+                    if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
+                }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                const base64 = canvas.toDataURL('image/jpeg', 0.7);
+                db.ref(`users/${idAuditor}`).update({ fotoPerfil: base64 })
+                    .then(() => {
+                        notify("✅ Foto guardada permanentemente");
+                        try{ window.playSound('coin'); }catch(e){}
+                        const perfilGrande = document.getElementById('avatarPerfilGrande');
+                        if(perfilGrande) perfilGrande.style.backgroundImage = "url('" + base64 + "')";
+                        const barraAvatar = document.getElementById('barraMiAvatar');
+                        if(barraAvatar) barraAvatar.style.backgroundImage = "url('" + base64 + "')";
+                        cacheFotosPerfil[idAuditor] = base64;
+                        document.querySelectorAll('.chat-avatar-img[data-uid="' + idAuditor + '"]').forEach(img => img.src = base64);
+                    })
+                    .catch(e => notify("Error al guardar: " + e.message));
+            };
+        };
+        reader.readAsDataURL(file);
+    }
+};
 
 window.validarCodigoAmigo = () => {
     const input = document.getElementById('inputFolio');
@@ -15799,6 +15914,7 @@ function verificarSiEsAdmin(emailUsuario) {
         document.getElementById('btnAdminCorreos').style.display = 'flex';
         document.getElementById('btnAdminRetiros').style.display = 'flex';
         document.getElementById('btnAdminBots').style.display = 'flex';
+        document.getElementById('btnAdminBorrarChats').style.display = 'flex';
         const dot = document.getElementById('adminDot');
         if (dot) dot.style.display = 'block';
         mostrarMiUidAdmin();
@@ -15807,6 +15923,7 @@ function verificarSiEsAdmin(emailUsuario) {
         isAdmin = true;
         document.getElementById('btnAdminCorreos').style.display = 'flex';
         document.getElementById('btnAdminBots').style.display = 'flex';
+        document.getElementById('btnAdminBorrarChats').style.display = 'flex';
         mostrarMiUidAdmin();
     }
 }
@@ -15872,6 +15989,39 @@ function iniciarEscuchaAdmin() {
         actualizarDot();
     });
 }
+
+// Eliminación total de chats privados: acción exclusiva de administradores autorizados.
+window.confirmarBorradoChatsPrivados = async () => {
+    if (isAdmin !== true || !auth.currentUser) {
+        return notify("❌ Solo un administrador autenticado puede realizar esta acción.");
+    }
+
+    const primeraConfirmacion = window.confirm(
+        "⚠️ ATENCIÓN\n\nEsto eliminará TODO el contenido de /chats_privados: conversaciones, mensajes y registros asociados.\n\nLos demás nodos de Firebase NO se modificarán.\n\n¿Deseas continuar?"
+    );
+    if (!primeraConfirmacion) return;
+
+    const frase = window.prompt(
+        'Para confirmar definitivamente, escribe exactamente: BORRAR CHATS PRIVADOS'
+    );
+    if (frase !== "BORRAR CHATS PRIVADOS") {
+        return notify("Operación cancelada. No se eliminó ningún chat.");
+    }
+
+    const boton = document.getElementById('btnAdminBorrarChats');
+    if (boton) { boton.style.pointerEvents = 'none'; boton.style.opacity = '0.6'; }
+
+    try {
+        await db.ref('chats_privados').remove();
+        console.log("Todos los chats privados han sido eliminados por un administrador.");
+        notify("✅ Se eliminaron todos los chats privados.");
+    } catch (error) {
+        console.error("Error al eliminar chats privados:", error);
+        notify("❌ No se pudieron eliminar los chats: " + (error.message || "Error de Firebase"));
+    } finally {
+        if (boton) { boton.style.pointerEvents = ''; boton.style.opacity = ''; }
+    }
+};
 
 window.abrirPanelAdmin = () => {
     abrirAdminRetiros();
@@ -18003,20 +18153,12 @@ window._hayChatAbierto = function() {
 
 let _ultimoBloqueoCapturas = null;
 window._syncBloqueoCapturas = function(force) {
-    const ajuste = window._bloqueoCapturasActivo();
-    const debe = ajuste && window._hayChatAbierto();
+    const debe = window._bloqueoCapturasActivo() && window._hayChatAbierto();
     if (!force && debe === _ultimoBloqueoCapturas) return;
     _ultimoBloqueoCapturas = debe;
     try {
-        if (window.AndroidNative) {
-            // El ajuste puro se guarda aparte para que el chat nativo
-            // (otra Activity) también aplique FLAG_SECURE.
-            if (AndroidNative.setPreferenciaBloqueoCapturas) {
-                AndroidNative.setPreferenciaBloqueoCapturas(ajuste);
-            }
-            if (AndroidNative.setBloquearCapturas) {
-                AndroidNative.setBloquearCapturas(debe);
-            }
+        if (window.AndroidNative && AndroidNative.setBloquearCapturas) {
+            AndroidNative.setBloquearCapturas(debe);
         }
     } catch(e) {}
 };
