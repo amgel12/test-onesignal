@@ -1334,9 +1334,12 @@
   .profile-avatar-large {
       width: 90px; height: 90px; border-radius: 50%;
       border: 4px solid white;
-      background-size: cover; background-color: #e2e8f0; background-position: center;
+      background-size: cover; background-repeat: no-repeat; background-color: #e2e8f0; background-position: center;
       box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+      position: relative; overflow: hidden; isolation: isolate;
   }
+  /* El avatar del perfil se pinta como fondo: evita una segunda foto superpuesta. */
+  .profile-avatar-large > img { display: none !important; }
 
   .profile-stats-row {
       display: flex; margin: 0 16px 16px; background: white;
@@ -8659,13 +8662,9 @@ if (typeof actualizarBioResumen === 'function') actualizarBioResumen(d.bio);
                 });
             }
 
-            // Avatar
+            // Avatar: mantener una sola instancia visible en el perfil propio.
             const imagenMostrar = d.fotoPerfil || getAvatarUrl(idAuditor);
-            const perfilGrande = document.getElementById('avatarPerfilGrande');
-            if (perfilGrande) perfilGrande.style.backgroundImage = "url('" + imagenMostrar + "')";
-
-            const barraAvatar = document.getElementById('barraMiAvatar');
-            if (barraAvatar) barraAvatar.style.backgroundImage = "url('" + imagenMostrar + "')";
+            window.actualizarAvatarPropio(imagenMostrar);
 
             // Alerta Foto
             const alertFoto = document.getElementById('alertFoto');
@@ -14912,6 +14911,25 @@ window.abrirModalInvitar = () => {
     try { window.playSound('click'); } catch(e){}
 };
 
+// Renderiza la foto del usuario en un único elemento y elimina posibles duplicados
+// del mismo ID que pudieran quedar tras reconstrucciones de la pantalla.
+window.actualizarAvatarPropio = (url) => {
+    const avatares = document.querySelectorAll('#avatarPerfilGrande');
+    const perfilGrande = avatares[0] || null;
+    avatares.forEach((avatar, index) => {
+        if (index > 0) avatar.remove();
+    });
+    if (perfilGrande) {
+        perfilGrande.querySelectorAll('img').forEach(img => img.remove());
+        perfilGrande.style.backgroundImage = url ? `url("${String(url).replace(/"/g, '%22')}")` : 'none';
+        perfilGrande.style.backgroundRepeat = 'no-repeat';
+        perfilGrande.style.backgroundPosition = 'center';
+        perfilGrande.style.backgroundSize = 'cover';
+    }
+    const barraAvatar = document.getElementById('barraMiAvatar');
+    if (barraAvatar) barraAvatar.style.backgroundImage = url ? `url("${String(url).replace(/"/g, '%22')}")` : 'none';
+};
+
 window.subirMiFotoPerfil = (input) => {
     if (input.files && input.files[0]) {
         const file = input.files[0];
@@ -14934,7 +14952,7 @@ window.subirMiFotoPerfil = (input) => {
                 const fotoBase64 = canvas.toDataURL('image/jpeg', 0.8);
                 db.ref(`users/${idAuditor}`).update({ fotoPerfil: fotoBase64 }).then(() => {
                     notify("✅ Foto de perfil actualizada");
-                    avatarDiv.style.backgroundImage = "url('" + fotoBase64 + "')";
+                    window.actualizarAvatarPropio(fotoBase64);
                     avatarDiv.style.opacity = "1";
                     cacheFotosPerfil[idAuditor] = fotoBase64;
                     document.querySelectorAll('.chat-avatar-img[data-uid="' + idAuditor + '"]').forEach(img => img.src = fotoBase64);
@@ -14974,10 +14992,7 @@ window.procesarAvatarPersonal = (input) => {
                     .then(() => {
                         notify("✅ Foto guardada permanentemente");
                         try{ window.playSound('coin'); }catch(e){}
-                        const perfilGrande = document.getElementById('avatarPerfilGrande');
-                        if(perfilGrande) perfilGrande.style.backgroundImage = "url('" + base64 + "')";
-                        const barraAvatar = document.getElementById('barraMiAvatar');
-                        if(barraAvatar) barraAvatar.style.backgroundImage = "url('" + base64 + "')";
+                        window.actualizarAvatarPropio(base64);
                         cacheFotosPerfil[idAuditor] = base64;
                         document.querySelectorAll('.chat-avatar-img[data-uid="' + idAuditor + '"]').forEach(img => img.src = base64);
                     })
