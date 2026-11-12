@@ -18084,12 +18084,20 @@ window._hayChatAbierto = function() {
 
 let _ultimoBloqueoCapturas = null;
 window._syncBloqueoCapturas = function(force) {
-    const debe = window._bloqueoCapturasActivo() && window._hayChatAbierto();
+    const ajuste = window._bloqueoCapturasActivo();
+    const debe = ajuste && window._hayChatAbierto();
     if (!force && debe === _ultimoBloqueoCapturas) return;
     _ultimoBloqueoCapturas = debe;
     try {
-        if (window.AndroidNative && AndroidNative.setBloquearCapturas) {
-            AndroidNative.setBloquearCapturas(debe);
+        if (window.AndroidNative) {
+            // El ajuste puro se guarda aparte para que el chat nativo
+            // (otra Activity) también aplique FLAG_SECURE.
+            if (AndroidNative.setPreferenciaBloqueoCapturas) {
+                AndroidNative.setPreferenciaBloqueoCapturas(ajuste);
+            }
+            if (AndroidNative.setBloquearCapturas) {
+                AndroidNative.setBloquearCapturas(debe);
+            }
         }
     } catch(e) {}
 };
