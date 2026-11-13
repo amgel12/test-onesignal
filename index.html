@@ -18783,13 +18783,32 @@ window.onCompraGooglePlayError = (msg) => {
 // Esta función la llamará Kotlin cuando la compra sea exitosa
 // Llamada desde Kotlin (Google Play) al comprar mensajes — acredita extras nativo
 window.onCompraMensajesExitosa = (cantidadMensajes) => {
-    db.ref(`users/${idAuditor}/privados_diarios/extras`).once('value', s => {
-        const extras = s.val() || 0;
-        db.ref(`users/${idAuditor}/privados_diarios/extras`).set(extras + cantidadMensajes)
-        .then(() => {
-            notify(`✅ ¡Compra exitosa! +${cantidadMensajes} mensajes añadidos.`);
-            try { window.playSound('win'); } catch(e){}
-        });
+    const cantidad = Number(cantidadMensajes) || 20;
+    let peer = null;
+    try {
+        if (typeof currentChatId === 'string' && currentChatId.includes('_')) {
+            peer = currentChatId.split('_').find(p => p !== idAuditor) || null;
+        }
+    } catch (e) {}
+    if (!peer) {
+        notify("✅ Compra recibida. Abre el chat donde quieres usar tus mensajes e intenta enviar.");
+        return;
+    }
+    const ahora = new Date();
+    const hoy = ahora.getFullYear() + '-' +
+        String(ahora.getMonth() + 1).padStart(2, '0') + '-' +
+        String(ahora.getDate()).padStart(2, '0');
+    // Los extras viven por chat en la misma ruta que usa el chat nativo.
+    db.ref(`users/${idAuditor}/privados_diarios/${peer}`).transaction(datos => {
+        const mismoDia = datos && datos.fecha === hoy;
+        const count = mismoDia ? (Number(datos.count) || 0) : 0;
+        const extras = mismoDia ? (Number(datos.extras) || 0) : 0;
+        return { fecha: hoy, count: count, extras: extras + cantidad };
+    }).then(() => {
+        notify(`✅ ¡Compra exitosa! +${cantidad} mensajes añadidos.`);
+        try { window.playSound('win'); } catch(e){}
+    }).catch(err => {
+        notify("⚠️ Compra recibida, pero no se pudo acreditar: " + err.message);
     });
 };
 
